@@ -22,7 +22,7 @@ jobs:
       - name: Read code to analyze
         id: code
         run: |
-          CODE=$(cat src/example.js 2>/dev/null || echo "Código src/example.js no encontrado")
+          CODE=$(cat src/example.js 2>/dev/null || echo "Código src/example.js no encontrado o error")
           echo "content<<EOF" >> $GITHUB_OUTPUT
           echo "$CODE" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
