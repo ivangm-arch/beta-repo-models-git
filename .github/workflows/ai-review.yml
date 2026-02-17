@@ -18,16 +18,38 @@ jobs:
       - name: Checkout codigo
         uses: actions/checkout@v4
 
-      - name: Leer codigo de ejemplo
+      - name: Leer codigo ejemplo
         id: codigo
         run: |
-          if [ -f "src/example.js" ]; then
-            CODIGO=$(cat src/example.js)
-            echo "existe=true" >> $GITHUB_OUTPUT
-            echo "contenido=$CODIGO" >> $GITHUB_OUTPUT
-          else
-            echo "existe=false" >> $GITHUB_OUTPUT
-            echo "contenido=Archivo src/example.js no encontrado" >> $GITHUB_OUTPUT
-          fi
+          CODIGO=$(cat src/example.js 2>/dev/null || echo "Archivo no encontrado")
+          echo "contenido<<EOF" >> $GITHUB_OUTPUT
+          echo "$CODIGO" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-      - 
+      - name: Revision IA completa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Leer codigo
+          CODIGO="${{ steps.codigo.outputs.contenido }}"
+          
+          # Detectar tipo evento
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR_NUM="${{ github.event.pull_request.number }}"
+            TIPO="PR #$PR_NUM"
+            URL_COMENT="https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUM/comments"
+            
+            TITULO=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUM" | jq -r '.title')
+            BODY=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUM" | jq -r '.body')
+          else
+            TIPO="Push main (${{ github.sha.slice(0,7) }})"
+            URL_COMENT="https://api.github.com/repos/${{ github.repository }}/issues"
+            TITULO="Commit main"
+            BODY="Analisis automatico"
+          fi
+          
+          # Prompt usando heredoc (sin problemas YAML)
+          read -r -d '' PROMPT << EOF || true
+Eres revisor de codigo para estudian
