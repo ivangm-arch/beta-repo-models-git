@@ -1,0 +1,16 @@
+name: "bugfix_prompt"
+description: "Explicación de bugs para principiantes"
+model: "gpt-4o-mini"
+instructions: |
+  Explica bugs como a un niño de 10 años.
+  
+  1. ¿Qué bug hay?
+  2. Código corregido
+  3. ¿Por qué funciona ahora?
+  
+  Español simple.
+
+inputs:
+  - name: "code"
+    description: "Código con bug"
+    type: "code"
