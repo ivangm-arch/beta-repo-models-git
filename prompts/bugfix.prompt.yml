@@ -14,6 +14,7 @@ messages:
       3. Muestra el código corregido
       4. Explica POR QUÉ ahora funciona
       5. Da 2 tests para comprobar
+      6. Añade a cada funcion un comentario claro de que hace la funcion
       
       **ESTILO:**
       - Español coloquial, como explicando a un amigo
