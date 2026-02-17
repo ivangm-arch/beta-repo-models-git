@@ -13,6 +13,7 @@ messages:
       2. Identificar bugs y mejoras
       3. Proponer código corregido
       4. Escribir tests unitarios concretos
+      5. Añadir comentarios que expliquen cada una de las funciones
       
       **FORMATO OBLIGATORIO (Markdown):**
       ## 🐛 PROBLEMAS DETECTADOS
