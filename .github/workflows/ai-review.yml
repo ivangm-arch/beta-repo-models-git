@@ -1,6 +1,10 @@
-name: 🤖 AI Code Review (SIN github-script)
+name: Analisis IA Codigo
 
 on:
+  # Se ejecuta en cada push a main
+  push:
+    branches: [main]
+  # Se ejecuta en cada PR
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -10,103 +14,94 @@ permissions:
   models: read
 
 jobs:
-  ai-review:
+  revision-ia:
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout
-      - name: Checkout
+      # Paso 1: Checkout del repositorio
+      - name: Checkout codigo
         uses: actions/checkout@v4
 
-      # 2. LEER src/example.js
-      - name: Read code file
-        id: code
+      # Paso 2: Leer archivo src/example.js
+      - name: Leer codigo de ejemplo
+        id: codigo
         run: |
           if [ -f "src/example.js" ]; then
-            CODE=$(cat src/example.js)
+            CODIGO=$(cat src/example.js)
+            echo "existe=true" >> $GITHUB_OUTPUT
+            echo "contenido=$CODIGO" >> $GITHUB_OUTPUT
           else
-            CODE="Archivo src/example.js no encontrado"
+            echo "existe=false" >> $GITHUB_OUTPUT
+            echo "contenido=Archivo src/example.js no encontrado" >> $GITHUB_OUTPUT
           fi
-          echo "content=$CODE" >> $GITHUB_OUTPUT
 
-      # 3. TODO EN UN SOLO PASO bash (SIN github-script)
-      - name: 🔮 Analyze + Comment
+      # Paso 3: Analisis completo con GitHub Models + comentario
+      - name: Analizar con IA y comentar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
         run: |
-          # Datos del PR desde GitHub API
-          PR_TITLE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER" \
-            | jq -r '.title // "Sin título"')
+          # Obtener codigo a analizar
+          CODIGO="${{ steps.codigo.outputs.contenido }}"
           
-          PR_BODY=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER" \
-            | jq -r '.body // "Sin descripción"')
+          # Determinar tipo de evento y URL de comentario
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            NUM_PR="${{ github.event.pull_request.number }}"
+            TIPO_EVENTO="PR #$NUM_PR"
+            URL_COMENTARIO="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/$NUM_PR/comments"
+            
+            # Datos del PR desde API
+            TITULO_PR=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/pulls/$NUM_PR" | jq -r '.title // "Sin titulo"')
+            DESCRIPCION_PR=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/pulls/$NUM_PR" | jq -r '.body // "Sin descripcion"')
+          else
+            # Push a main
+            TIPO_EVENTO="Push main (${{ github.sha.slice(0,7) }})"
+            URL_COMENTARIO="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues"
+            TITULO_PR="Commit automatico"
+            DESCRIPCION_PR="Analisis en main"
+          fi
           
-          # Código a analizar
-          CODE="${{ steps.code.outputs.content }}"
-          
-          # Prompt para el modelo
-          PROMPT="Eres revisor de código para estudiantes.
+          # Prompt para GitHub Models
+          PROMPT="Eres revisor automatico de codigo para estudiantes.
 
-**CÓDIGO ANALIZADO (src/example.js):**
+**EVENTO:** $TIPO_EVENTO
+**CODIGO ANALIZADO:** src/example.js
+
 \`\`\`javascript
-$CODE
+$CODIGO
 \`\`\`
 
-**PR #$PR_NUMBER:**
-Título: '$PR_TITLE'
-Descripción: '$PR_BODY'
+${TITULO_PR:+**INFO PR:**
+Titulo: '$TITULO_PR'
+Descripcion: '$DESCRIPCION_PR'}
 
-**ANÁLISIS (Markdown):**
-## 🐛 BUGS DETECTADOS
-## 🔧 CÓDIGO CORREGIDO  
-## ✅ TESTS UNITARIOS
-## 📝 FEEDBACK PR
+**RESPUESTA OBLIGATORIA (formato Markdown):**
+## BUGS DETECTADOS
+## CODIGO CORREGIDO
+## TESTS UNITARIOS
+## RECOMENDACIONES PR
 
-Español claro, educativo."
+Usa espanol claro y educativo."
 
-          # 4. LLAMAR GitHub Models API
-          AI_RESPONSE=$(curl -s -X POST \
+          # Llamada a API GitHub Models
+          RESPUESTA_IA=$(curl -s -X POST \
             https://models.inference.ai.azure.com/chat/completions \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Content-Type: application/json" \
             -d "{
               \"model\": \"gpt-4o-mini\",
               \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}],
-              \"temperature\": 0.3
-            }" | jq -r '.choices[0].message.content // "❌ Error del modelo"')
+              \"temperature\": 0.3,
+              \"max_tokens\": 1500
+            }" | jq -r '.choices[0].message.content // "Error del modelo"')
 
-          # 5. COMENTAR en PR
-          COMMENT="## 🤖 **AI Code Review** (GitHub Models)
+          # Formatear comentario final
+          COMENTARIO="## Analisis IA Codigo (GitHub Models)
 
-**Analizó:** \`src/example.js\` (\`${{ github.sha.slice(0,7) }}\`)
-
-\`\`\`
-$AI_RESPONSE
-\`\`\`
+**Archivo analizado:** src/example.js
+**Evento:** $TIPO_EVENTO
 
 ---
-*Automático*"
-
-          curl -s -X POST \
-            "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/$PR_NUMBER/comments" \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            -d "{\"body\": \"$COMMENT\"}" \
-            | jq .
-
-          echo "✅ AI review posted!"
-
-      # 6. Labels (SIN github-script)
-      - name: Add labels
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          curl -s -X POST \
-            "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/issues/${{ github.event.pull_request.number }}/labels" \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -d '["ai-reviewed"]' \
-            | jq .
+$RESPUEST
