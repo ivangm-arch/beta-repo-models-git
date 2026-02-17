@@ -1,10 +1,8 @@
 name: Analisis IA Codigo
 
 on:
-  # Se ejecuta en cada push a main
   push:
     branches: [main]
-  # Se ejecuta en cada PR
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -17,11 +15,9 @@ jobs:
   revision-ia:
     runs-on: ubuntu-latest
     steps:
-      # Paso 1: Checkout del repositorio
       - name: Checkout codigo
         uses: actions/checkout@v4
 
-      # Paso 2: Leer archivo src/example.js
       - name: Leer codigo de ejemplo
         id: codigo
         run: |
@@ -34,74 +30,4 @@ jobs:
             echo "contenido=Archivo src/example.js no encontrado" >> $GITHUB_OUTPUT
           fi
 
-      # Paso 3: Analisis completo con GitHub Models + comentario
-      - name: Analizar con IA y comentar
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO_OWNER: ${{ github.repository_owner }}
-          REPO_NAME: ${{ github.event.repository.name }}
-        run: |
-          # Obtener codigo a analizar
-          CODIGO="${{ steps.codigo.outputs.contenido }}"
-          
-          # Determinar tipo de evento y URL de comentario
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            NUM_PR="${{ github.event.pull_request.number }}"
-            TIPO_EVENTO="PR #$NUM_PR"
-            URL_COMENTARIO="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/$NUM_PR/comments"
-            
-            # Datos del PR desde API
-            TITULO_PR=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-              "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/pulls/$NUM_PR" | jq -r '.title // "Sin titulo"')
-            DESCRIPCION_PR=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-              "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/pulls/$NUM_PR" | jq -r '.body // "Sin descripcion"')
-          else
-            # Push a main
-            TIPO_EVENTO="Push main (${{ github.sha.slice(0,7) }})"
-            URL_COMENTARIO="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues"
-            TITULO_PR="Commit automatico"
-            DESCRIPCION_PR="Analisis en main"
-          fi
-          
-          # Prompt para GitHub Models
-          PROMPT="Eres revisor automatico de codigo para estudiantes.
-
-**EVENTO:** $TIPO_EVENTO
-**CODIGO ANALIZADO:** src/example.js
-
-\`\`\`javascript
-$CODIGO
-\`\`\`
-
-${TITULO_PR:+**INFO PR:**
-Titulo: '$TITULO_PR'
-Descripcion: '$DESCRIPCION_PR'}
-
-**RESPUESTA OBLIGATORIA (formato Markdown):**
-## BUGS DETECTADOS
-## CODIGO CORREGIDO
-## TESTS UNITARIOS
-## RECOMENDACIONES PR
-
-Usa espanol claro y educativo."
-
-          # Llamada a API GitHub Models
-          RESPUESTA_IA=$(curl -s -X POST \
-            https://models.inference.ai.azure.com/chat/completions \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"model\": \"gpt-4o-mini\",
-              \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}],
-              \"temperature\": 0.3,
-              \"max_tokens\": 1500
-            }" | jq -r '.choices[0].message.content // "Error del modelo"')
-
-          # Formatear comentario final
-          COMENTARIO="## Analisis IA Codigo (GitHub Models)
-
-**Archivo analizado:** src/example.js
-**Evento:** $TIPO_EVENTO
-
----
-$RESPUEST
+      - 
