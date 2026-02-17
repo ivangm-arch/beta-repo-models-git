@@ -1,27 +1,112 @@
-name: AI Review
-on: [pull_request]
+name: 🤖 AI Code Review (SIN github-script)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  models: read
+
 jobs:
-  review:
+  ai-review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: |
-          echo "🤖 Analizando src/example.js..."
-          echo "### Bugs detectados:
-          - divide(): no valida b=0
-          - discount(): muta percentage
+      # 1. Checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. LEER src/example.js
+      - name: Read code file
+        id: code
+        run: |
+          if [ -f "src/example.js" ]; then
+            CODE=$(cat src/example.js)
+          else
+            CODE="Archivo src/example.js no encontrado"
+          fi
+          echo "content=$CODE" >> $GITHUB_OUTPUT
+
+      # 3. TODO EN UN SOLO PASO bash (SIN github-script)
+      - name: 🔮 Analyze + Comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          # Datos del PR desde GitHub API
+          PR_TITLE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER" \
+            | jq -r '.title // "Sin título"')
           
-          Tests sugeridos:
-          \`\`\`js
-          expect(() => divide(10,0)).toThrow()
-          \`\`\`" >> review.md
-      - uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: fs.readFileSync('review.md', 'utf8')
-            })
+          PR_BODY=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER" \
+            | jq -r '.body // "Sin descripción"')
+          
+          # Código a analizar
+          CODE="${{ steps.code.outputs.content }}"
+          
+          # Prompt para el modelo
+          PROMPT="Eres revisor de código para estudiantes.
+
+**CÓDIGO ANALIZADO (src/example.js):**
+\`\`\`javascript
+$CODE
+\`\`\`
+
+**PR #$PR_NUMBER:**
+Título: '$PR_TITLE'
+Descripción: '$PR_BODY'
+
+**ANÁLISIS (Markdown):**
+## 🐛 BUGS DETECTADOS
+## 🔧 CÓDIGO CORREGIDO  
+## ✅ TESTS UNITARIOS
+## 📝 FEEDBACK PR
+
+Español claro, educativo."
+
+          # 4. LLAMAR GitHub Models API
+          AI_RESPONSE=$(curl -s -X POST \
+            https://models.inference.ai.azure.com/chat/completions \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"model\": \"gpt-4o-mini\",
+              \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}],
+              \"temperature\": 0.3
+            }" | jq -r '.choices[0].message.content // "❌ Error del modelo"')
+
+          # 5. COMENTAR en PR
+          COMMENT="## 🤖 **AI Code Review** (GitHub Models)
+
+**Analizó:** \`src/example.js\` (\`${{ github.sha.slice(0,7) }}\`)
+
+\`\`\`
+$AI_RESPONSE
+\`\`\`
+
+---
+*Automático*"
+
+          curl -s -X POST \
+            "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/$PR_NUMBER/comments" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -d "{\"body\": \"$COMMENT\"}" \
+            | jq .
+
+          echo "✅ AI review posted!"
+
+      # 6. Labels (SIN github-script)
+      - name: Add labels
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -s -X POST \
+            "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/issues/${{ github.event.pull_request.number }}/labels" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -d '["ai-reviewed"]' \
+            | jq .
