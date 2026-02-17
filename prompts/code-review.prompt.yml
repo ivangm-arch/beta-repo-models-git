@@ -1,62 +1,64 @@
-# prompts/code-review.prompt.yml
-name: "code_review_prompt"
-description: "🔍 Revisor automático de código para estudiantes"
-model: "gpt-4o-mini"
+name: 🤖 AI Code Review & PR Analysis
 
-messages:
-  - role: system
-    content: |
-      Eres un **revisor de código experto** para estudiantes principiantes.
-      
-      **TU TRABAJO:**
-      1. Analizar el {{codigo_a_analizar}}
-      2. Identificar bugs y mejoras
-      3. Proponer código corregido
-      4. Escribir tests unitarios concretos
-      5. Añadir comentarios que expliquen cada una de las funciones
-      
-      **FORMATO OBLIGATORIO (Markdown):**
-      ## 🐛 PROBLEMAS DETECTADOS
-      ## 🔧 CÓDIGO CORREGIDO
-      ## ✅ TESTS UNITARIOS
-      ## 💡 SUGERENCIAS EXTRA
-      
-      **REGLAS:**
-      - Español claro y pedagógico
-      - **NO cambies** nombres de funciones/parámetros
-      - Tests con `expect()` y mensajes descriptivos
-      - Máximo 3 problemas por categoría
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
 
-  - role: user
-    content: |
-      Analiza este código en {{lenguaje}}:
+permissions:
+  contents: read
+  pull-requests: write
+  models: read
 
-      ```{{lenguaje}}
-      {{codigo_a_analizar}}
-      ```
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Checkout del código
+      - name: Checkout
+        uses: actions/checkout@v4
 
-testData:
-  - codigo_a_analizar: |
-      function divide(a, b) {
-        return a / b;
-      }
-    lenguaje: javascript
-  - codigo_a_analizar: |
-      function discount(price, percentage) {
-        if (percentage > 100) {
-          percentage = 100;
-        }
-        return price - (price * percentage / 100);
-      }
-    lenguaje: javascript
+      # 2. LEER src/example.js → output para el modelo
+      - name: Read code to analyze
+        id: code
+        run: |
+          CODE=$(cat src/example.js 2>/dev/null || echo "Código src/example.js no encontrado")
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$CODE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-inputs:
-  - name: codigo_a_analizar
-    description: "Pega aquí el código a analizar (src/example.js u otro)"
-    type: code
-    language: "{{lenguaje}}"
-  - name: lenguaje
-    description: "Lenguaje del código"
-    type: string
-    default: javascript
-    enum: ["javascript", "python", "java", "typescript"]
+      # 3. Obtener contexto del PR
+      - name: Get PR info
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            core.setOutput('title', pr.title);
+            core.setOutput('body', pr.body || '(sin descripción)');
+            core.setOutput('author', pr.user.login);
+
+      # 4. LLAMAR GITHub MODELS API
+      - name: 🔮 Call GitHub Models API
+        id: models
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Código que analiza (src/example.js)
+          CODE="${{ steps.code.outputs.content }}"
+          
+          # Datos del PR
+          TITLE="${{ steps.pr.outputs.title }}"
+          BODY="${{ steps.pr.outputs.body }}"
+          
+          # Prompt completo
+          PROMPT="Eres revisor automático para estudiantes.
+
+**CÓDIGO ANALIZADO (src/example.js):**
+\`\`\`javascript
+$CODE
+\`\`\`
+
+**PR INFO:**
+Título: '$TITLE'
+Autor: '${{ steps.pr.outputs.author }}'
