@@ -12,44 +12,63 @@ permissions:
   models: read
 
 jobs:
-  revision-ia:
+  revision:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout codigo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Leer codigo ejemplo
+      - name: Leer codigo
         id: codigo
+        shell: bash
         run: |
-          CODIGO=$(cat src/example.js 2>/dev/null || echo "Archivo no encontrado")
-          echo "contenido<<EOF" >> $GITHUB_OUTPUT
+          CODIGO=$(cat src/example.js 2>/dev/null || echo "No encontrado")
+          echo "codigo<<EOF" >> $GITHUB_OUTPUT
           echo "$CODIGO" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Revision IA completa
+      - name: Revision IA
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
-          # Leer codigo
-          CODIGO="${{ steps.codigo.outputs.contenido }}"
+          CODIGO="${{ steps.codigo.outputs.codigo }}"
           
-          # Detectar tipo evento
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            PR_NUM="${{ github.event.pull_request.number }}"
-            TIPO="PR #$PR_NUM"
-            URL_COMENT="https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUM/comments"
-            
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            PR="${{ github.event.pull_request.number }}"
+            URL="https://api.github.com/repos/${{ github.repository }}/issues/$PR/comments"
             TITULO=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUM" | jq -r '.title')
-            BODY=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUM" | jq -r '.body')
+              "https://api.github.com/repos/${{ github.repository }}/pulls/$PR" | jq -r .title)
           else
-            TIPO="Push main (${{ github.sha.slice(0,7) }})"
-            URL_COMENT="https://api.github.com/repos/${{ github.repository }}/issues"
-            TITULO="Commit main"
-            BODY="Analisis automatico"
+            URL="https://api.github.com/repos/${{ github.repository }}/issues"
+            TITULO="Push main"
           fi
           
-          # Prompt usando heredoc (sin problemas YAML)
-          read -r -d '' PROMPT << EOF || true
-Eres revisor de codigo para estudian
+          PROMPT="Revisa este codigo JS para estudiantes:
+
+CODIGO src/example.js:
+\`\`\`js
+$CODIGO
+\`\`\`
+
+Titulo: $TITULO
+
+Responde:
+BUGS:
+CORRECCION:
+TESTS:"
+
+          RESPUESTA=$(curl -s -X POST \
+            https://models.inference.ai.azure.com/chat/completions \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"$PROMPT\"}]}" | jq -r '.choices[0].message.content')
+
+          COMENTARIO="## IA Analisis
+
+Codigo: src/example.js
+
+$RESPUESTA"
+
+          curl -s -X POST "$URL" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -d "{\"body\":\"$COMENTARIO\"}"
