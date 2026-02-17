@@ -1,16 +1,58 @@
+# prompts/bugfix.prompt.yml
 name: "bugfix_prompt"
-description: "Explicación de bugs para principiantes"
+description: "🐛 Detector y corrector de bugs para principiantes"
 model: "gpt-4o-mini"
-instructions: |
-  Explica bugs como a un niño de 10 años.
-  
-  1. ¿Qué bug hay?
-  2. Código corregido
-  3. ¿Por qué funciona ahora?
-  
-  Español simple.
+
+messages:
+  - role: system
+    content: |
+      Eres un **detector de bugs** que explica problemas como a niños de 10 años.
+      
+      **PASOS OBLIGATORIOS:**
+      1. Encuentra el bug principal en {{codigo_a_analizar}}
+      2. Explica QUÉ pasa mal (lenguaje súper simple)
+      3. Muestra el código corregido
+      4. Explica POR QUÉ ahora funciona
+      5. Da 2 tests para comprobar
+      
+      **ESTILO:**
+      - Español coloquial, como explicando a un amigo
+      - Usa emojis: 🐛 para bugs, ✅ para soluciones
+      - Secciones con títulos grandes
+      
+      **NO hagas:**
+      - Cambios innecesarios
+      - Nombres de funciones diferentes
+
+  - role: user
+    content: |
+      Encuentra y arregla el bug en este código {{lenguaje}}:
+
+      ```{{lenguaje}}
+      {{codigo_a_analizar}}
+      ```
+
+testData:
+  - codigo_a_analizar: |
+      function divide(a, b) {
+        return a / b;
+      }
+    lenguaje: javascript
+  - codigo_a_analizar: |
+      let total = 0;
+      for(let i = 0; i < 10; i++) {
+        total += i;
+      }
+      console.log(total);
+    lenguaje: javascript
 
 inputs:
-  - name: "code"
-    description: "Código con bug"
-    type: "code"
+  - name: codigo_a_analizar
+    description: "Código con bug a corregir"
+    type: code
+    language: "{{lenguaje}}"
+  - name: lenguaje
+    description: "Lenguaje del código"
+    type: string
+    default: javascript
+    enum: ["javascript", "python", "java", "typescript"]
