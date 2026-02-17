@@ -10,6 +10,7 @@ instructions: |
   **TESTS:** (2 tests concretos)
   
   Siempre en español.
+  Responde siempre usando codigo markdown incluye viñetas o tablas si lo necesitas
 
 inputs:
   - name: "code"
