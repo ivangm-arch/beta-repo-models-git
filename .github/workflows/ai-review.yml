@@ -1,74 +1,17 @@
-name: Analisis IA Codigo
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    types: [opened, synchronize, reopened]
-
-permissions:
-  contents: read
-  pull-requests: write
-  models: read
-
+name: IA Analisis
+on: [push, pull_request]
 jobs:
-  revision:
+  review:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Leer codigo
-        id: codigo
-        shell: bash
-        run: |
-          CODIGO=$(cat src/example.js 2>/dev/null || echo "No encontrado")
-          echo "codigo<<EOF" >> $GITHUB_OUTPUT
-          echo "$CODIGO" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Revision IA
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          CODIGO="${{ steps.codigo.outputs.codigo }}"
-          
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            PR="${{ github.event.pull_request.number }}"
-            URL="https://api.github.com/repos/${{ github.repository }}/issues/$PR/comments"
-            TITULO=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls/$PR" | jq -r .title)
-          else
-            URL="https://api.github.com/repos/${{ github.repository }}/issues"
-            TITULO="Push main"
-          fi
-          
-          PROMPT="Revisa este codigo JS para estudiantes:
-
-CODIGO src/example.js:
-\`\`\`js
-$CODIGO
-\`\`\`
-
-Titulo: $TITULO
-
-Responde:
-BUGS:
-CORRECCION:
-TESTS:"
-
-          RESPUESTA=$(curl -s -X POST \
-            https://models.inference.ai.azure.com/chat/completions \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"$PROMPT\"}]}" | jq -r '.choices[0].message.content')
-
-          COMENTARIO="## IA Analisis
-
-Codigo: src/example.js
-
-$RESPUESTA"
-
-          curl -s -X POST "$URL" \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -d "{\"body\":\"$COMENTARIO\"}"
+      - run: |
+          TOKEN='${{ secrets.GITHUB_TOKEN }}'
+          CODIGO=$(cat src/example.js || echo "no archivo")
+          curl -s -X POST https://models.inference.ai.azure.com/chat/completions \
+            -H "Authorization: Bearer $TOKEN" \
+            -d "{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"Analiza: $CODIGO\"}]}" | \
+          jq -r '.choices[0].message.content' | \
+          curl -X POST "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number || 1 }}/comments" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d "{\"body\":\"IA: $(cat)\"}"
