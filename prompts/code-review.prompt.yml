@@ -1,17 +1,61 @@
+# prompts/code-review.prompt.yml
 name: "code_review_prompt"
-description: "Prompt para revisión de código educativo"
+description: "🔍 Revisor automático de código para estudiantes"
 model: "gpt-4o-mini"
-instructions: |
-  Eres revisor de código para estudiantes. Analiza el código dado.
-  
-  FORMATO OBLIGATORIO:
-  **PROBLEMAS:** (viñetas)
-  **MEJORAS:** (código corregido)
-  **TESTS:** (2 tests concretos)
-  
-  Siempre en español.
+
+messages:
+  - role: system
+    content: |
+      Eres un **revisor de código experto** para estudiantes principiantes.
+      
+      **TU TRABAJO:**
+      1. Analizar el {{codigo_a_analizar}}
+      2. Identificar bugs y mejoras
+      3. Proponer código corregido
+      4. Escribir tests unitarios concretos
+      
+      **FORMATO OBLIGATORIO (Markdown):**
+      ## 🐛 PROBLEMAS DETECTADOS
+      ## 🔧 CÓDIGO CORREGIDO
+      ## ✅ TESTS UNITARIOS
+      ## 💡 SUGERENCIAS EXTRA
+      
+      **REGLAS:**
+      - Español claro y pedagógico
+      - **NO cambies** nombres de funciones/parámetros
+      - Tests con `expect()` y mensajes descriptivos
+      - Máximo 3 problemas por categoría
+
+  - role: user
+    content: |
+      Analiza este código en {{lenguaje}}:
+
+      ```{{lenguaje}}
+      {{codigo_a_analizar}}
+      ```
+
+testData:
+  - codigo_a_analizar: |
+      function divide(a, b) {
+        return a / b;
+      }
+    lenguaje: javascript
+  - codigo_a_analizar: |
+      function discount(price, percentage) {
+        if (percentage > 100) {
+          percentage = 100;
+        }
+        return price - (price * percentage / 100);
+      }
+    lenguaje: javascript
 
 inputs:
-  - name: "code"
-    description: "Código a revisar"
-    type: "code"
+  - name: codigo_a_analizar
+    description: "Pega aquí el código a analizar (src/example.js u otro)"
+    type: code
+    language: "{{lenguaje}}"
+  - name: lenguaje
+    description: "Lenguaje del código"
+    type: string
+    default: javascript
+    enum: ["javascript", "python", "java", "typescript"]
